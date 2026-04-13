@@ -33,7 +33,7 @@ _model = None
 # Lifespan (startup / shutdown)
 # ---------------------------------------------------------------------------
 @asynccontextmanager
-async def lifespan(app: FastAPI):  # noqa: ARG001
+async def lifespan(_app: FastAPI):
     """Load the ML model once at startup; release resources on shutdown."""
     global _model
     try:
@@ -66,7 +66,7 @@ app = FastAPI(
 # Exception handler
 # ---------------------------------------------------------------------------
 @app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:  # noqa: ARG001
+async def generic_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unhandled exception: %s", exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error."})
 

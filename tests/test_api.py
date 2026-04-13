@@ -9,7 +9,7 @@ from app.main import app
 
 
 @pytest.fixture(scope="module")
-def client(ensure_model):  # noqa: ARG001  – ensure_model is the session fixture
+def client(ensure_model: str) -> TestClient:  # ensure_model guarantees model.pkl exists
     """Yield a synchronous TestClient that exercises the full ASGI lifespan."""
     with TestClient(app) as c:
         yield c

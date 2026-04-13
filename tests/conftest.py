@@ -10,6 +10,7 @@ local development without running training first).
 """
 
 import os
+from collections.abc import Generator
 
 import joblib
 import numpy as np
@@ -52,7 +53,7 @@ _TRAIN_Y = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2], dtype=np.int6
 
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_model():
+def ensure_model() -> Generator[str, None, None]:
     """
     Ensure a model.pkl artefact exists for the duration of the test session.
 

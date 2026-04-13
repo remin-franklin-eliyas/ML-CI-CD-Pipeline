@@ -137,7 +137,7 @@ def validate_data(df: pd.DataFrame) -> bool:
 # ---------------------------------------------------------------------------
 # Feature extraction
 # ---------------------------------------------------------------------------
-def extract_features_and_labels(df: pd.DataFrame):
+def extract_features_and_labels(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     """
     Convert a validated DataFrame into NumPy arrays suitable for sklearn.
 

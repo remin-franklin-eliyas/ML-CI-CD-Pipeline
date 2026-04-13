@@ -15,7 +15,7 @@ from app.schemas import PredictionRequest
 # Fixtures
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="module")
-def loaded_model(ensure_model):  # noqa: ARG001
+def loaded_model(ensure_model: str):  # ensure_model guarantees model.pkl exists
     """Return the loaded sklearn pipeline for the module."""
     return load_model()
 
