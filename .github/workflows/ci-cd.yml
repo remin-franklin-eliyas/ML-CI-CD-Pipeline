@@ -1,0 +1,199 @@
+# =============================================================================
+# CI/CD pipeline for the ML Iris Classifier project.
+#
+# Workflow stages
+# ---------------
+# 1. validate-and-train  – Install deps, validate data with GE, train model
+# 2. test                – Run pytest against the trained model artefact
+# 3. build-and-push      – Build Docker image, push to Docker Hub (main only)
+# 4. deploy              – Simulate deployment (main only)
+#
+# Required GitHub Secrets
+# -----------------------
+#   DOCKER_HUB_USERNAME   Your Docker Hub username
+#   DOCKER_HUB_TOKEN      Docker Hub access token (not password)
+# =============================================================================
+
+name: ML CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  # Docker image name – overridden in the build job once the secret is available
+  DOCKER_IMAGE_NAME: ml-iris-classifier
+
+jobs:
+  # ── 1. Data validation & model training ──────────────────────────────────
+  validate-and-train:
+    name: Validate Data & Train Model
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run data validation (Great Expectations)
+        run: |
+          python - <<'EOF'
+          import sys
+          sys.path.insert(0, ".")
+          from training.preprocess import load_data, validate_data
+          df = load_data("data/sample.csv")
+          validate_data(df)
+          print("✓  Data validation passed.")
+          EOF
+
+      - name: Train model
+        run: python training/train.py
+        env:
+          DATA_PATH: data/sample.csv
+          MODEL_PATH: model.pkl
+          MLFLOW_TRACKING_URI: mlflow_tracking
+          N_ESTIMATORS: "100"
+          MAX_DEPTH: "10"
+          ACCURACY_THRESHOLD: "0.85"
+
+      - name: Upload model artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-pkl
+          path: model.pkl
+          retention-days: 1
+
+  # ── 2. Tests ──────────────────────────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: validate-and-train
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download model artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: model-pkl
+
+      - name: Run tests with pytest
+        run: pytest tests/ -v --tb=short
+        env:
+          MODEL_PATH: model.pkl
+
+  # ── 3. Docker build & push (main branch pushes only) ─────────────────────
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download model artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: model-pkl
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 4. Deploy (simulated) ─────────────────────────────────────────────────
+  deploy:
+    name: Deploy (Simulated)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make deploy scripts executable
+        run: chmod +x deploy/deploy.sh deploy/blue_green_deploy.sh
+
+      - name: Simulate deployment (dry-run)
+        run: |
+          ./deploy/deploy.sh \
+            "${{ secrets.DOCKER_HUB_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}" \
+            "${{ needs.build-and-push.outputs.image_tag }}" \
+            --dry-run
