@@ -79,7 +79,7 @@ RANDOM_STATE = int(os.getenv("RANDOM_STATE", "42"))
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
-def train() -> tuple:
+def train() -> tuple[Pipeline, dict[str, float]]:
     """
     Full training pipeline: load → validate → preprocess → train → evaluate → save.
 

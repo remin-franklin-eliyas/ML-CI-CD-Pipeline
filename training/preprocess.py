@@ -160,7 +160,9 @@ def extract_features_and_labels(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarra
     return X, y
 
 
-def split_data(X: np.ndarray, y: np.ndarray, test_size: float = 0.2, random_state: int = 42):
+def split_data(
+    X: np.ndarray, y: np.ndarray, test_size: float = 0.2, random_state: int = 42
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Stratified train / test split.
 
